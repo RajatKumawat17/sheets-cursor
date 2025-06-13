@@ -7,3 +7,4 @@ websockets
 openai
 python-json-logger
 mcp
+python-dotenv

@@ -10,13 +10,12 @@ AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 
 class LLMClient:
-    class LLMClient:
-        def __init__(self):
-            self.client = AzureOpenAI(
-                api_version="2024-12-01-preview",
-                azure_endpoint=AZURE_OPENAI_ENDPOINT,
-                api_key=AZURE_OPENAI_API_KEY  # Replace with your actual API key
-            )
+    def __init__(self):
+        self.client = AzureOpenAI(
+            api_version="2024-12-01-preview",
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_key=AZURE_OPENAI_API_KEY
+        )
     
     def analyze_command(self, command: str, data_info: dict) -> dict:
         """Convert natural language command to data analysis instructions"""
@@ -39,13 +38,13 @@ class LLMClient:
         
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4.1",  # Adjust model name as needed
+                model="gpt-4.1",  # Adjust model name to match your Azure deployment
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": command}
                 ],
                 temperature=0.1,
-                max_tokens=500
+                max_tokens=2000
             )
             
             result = response.choices[0].message.content
