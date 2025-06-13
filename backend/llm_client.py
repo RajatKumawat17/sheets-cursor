@@ -2,13 +2,20 @@ from openai import AzureOpenAI
 import json
 import logging
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+
 class LLMClient:
     class LLMClient:
         def __init__(self):
             self.client = AzureOpenAI(
                 api_version="2024-12-01-preview",
-                azure_endpoint="https://azure-openai-etlzero.openai.azure.com/",
-                api_key="F18niRN92sIsw6m4Poamyn7D9lMhiailshKh5AEHVhNlIKqXnY3aJQQJ99BFACYeBjFXJ3w3AAABACOGOnNp"  # Replace with your actual API key
+                azure_endpoint=AZURE_OPENAI_ENDPOINT,
+                api_key=AZURE_OPENAI_API_KEY  # Replace with your actual API key
             )
     
     def analyze_command(self, command: str, data_info: dict) -> dict:
