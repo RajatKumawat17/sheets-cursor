@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pandas
+openpyxl
+python-multipart
+websockets
+openai
+python-json-logger
+mcp

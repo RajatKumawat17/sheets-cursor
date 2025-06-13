@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel MCP Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Excel MCP Tool</h1>
+            <div class="ai-badge">🤖 AI Assistant</div>
+        </header>
+        
+        <div class="upload-section">
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+            <button id="uploadBtn" class="upload-btn">Upload Excel/CSV File</button>
+            <div id="fileInfo" class="file-info"></div>
+        </div>
+        
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="data-preview">
+                    <h3>Data Preview</h3>
+                    <div id="dataTable"></div>
+                </div>
+                
+                <div class="data-stats">
+                    <h3>Data Statistics</h3>
+                    <div id="dataStats"></div>
+                </div>
+            </div>
+            
+            <div class="right-panel">
+                <div class="chat-container">
+                    <div id="chatMessages" class="chat-messages"></div>
+                    
+                    <div class="input-container">
+                        <input type="text" id="commandInput" placeholder="Ask me anything about your data..." />
+                        <button id="sendBtn">Send</button>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <canvas id="chartCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/script.js"></script>
+</body>
+</html>
