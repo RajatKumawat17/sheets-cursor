@@ -1,221 +1,434 @@
 import pandas as pd
-import json
 import numpy as np
-from typing import Dict, Any, List
+import json
+import ast
+import re
+from typing import Dict, Any, List, Union, Optional
 import logging
+from datetime import datetime, timedelta
+import warnings
+warnings.filterwarnings('ignore')
 
 class ExcelProcessor:
     def __init__(self):
         self.data = None
         self.filename = None
+        self.history = []
+        self.backup_data = None
     
     def load_file(self, file_path: str) -> Dict[str, Any]:
-        """Load Excel or CSV file"""
+        """Load Excel or CSV file with enhanced error handling"""
         try:
             if file_path.endswith('.csv'):
-                self.data = pd.read_csv(file_path)
+                self.data = pd.read_csv(file_path, encoding='utf-8')
             else:
-                self.data = pd.read_excel(file_path)
+                self.data = pd.read_excel(file_path, engine='openpyxl')
             
             self.filename = file_path.split('/')[-1]
-            
-            # Convert dtypes to string representation for JSON serialization
-            dtypes_dict = {col: str(dtype) for col, dtype in self.data.dtypes.items()}
+            self.backup_data = self.data.copy()
+            self._log_action("load_file", {"file": self.filename, "shape": self.data.shape})
             
             return {
                 "success": True,
                 "shape": self.data.shape,
                 "columns": self.data.columns.tolist(),
-                "dtypes": dtypes_dict,
-                "preview": self.data.head().to_dict('records')
+                "dtypes": {col: str(dtype) for col, dtype in self.data.dtypes.items()},
+                "preview": self._safe_json_convert(self.data.head(5).to_dict('records')),
+                "memory_usage": f"{self.data.memory_usage(deep=True).sum() / 1024**2:.2f} MB"
             }
         except Exception as e:
             logging.error(f"File loading error: {e}")
             return {"success": False, "error": str(e)}
     
-    def execute_analysis(self, instruction: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute analysis based on LLM instruction"""
+    def execute_smart_operation(self, instruction: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute smart operations with code generation and manipulation"""
         if self.data is None:
             return {"error": "No data loaded"}
         
-        action = instruction.get('action')
+        action = instruction.get('action', '').lower()
         params = instruction.get('parameters', {})
         
         try:
-            if action == 'group':
-                result = self._group_analysis(params)
-            elif action == 'filter':
-                result = self._filter_analysis(params)
-            elif action == 'calculate':
-                result = self._calculate_analysis(params)
-            elif action == 'chart':
-                result = self._chart_data(params)
+            # Map actions to methods
+            action_map = {
+                'edit_cell': self._edit_cell,
+                'create_column': self._create_column,
+                'derive_features': self._derive_features,
+                'apply_formula': self._apply_formula,
+                'filter_data': self._filter_data,
+                'group_aggregate': self._group_aggregate,
+                'pivot_table': self._pivot_table,
+                'merge_data': self._merge_data,
+                'clean_data': self._clean_data,
+                'transform_data': self._transform_data,
+                'statistical_analysis': self._statistical_analysis,
+                'generate_code': self._generate_code,
+                'execute_code': self._execute_code,
+                'create_derived_column': self._create_derived_column,
+                'batch_edit': self._batch_edit,
+                'smart_fill': self._smart_fill
+            }
+            
+            if action in action_map:
+                result = action_map[action](params)
+                self._log_action(action, params)
+                return result
             else:
-                result = {"error": f"Unknown action: {action}"}
-            
-            # Add chart type if specified
-            if 'chart_type' in instruction:
-                result['chart_type'] = instruction['chart_type']
-            
-            return result
+                return {"error": f"Unknown action: {action}"}
+        
         except Exception as e:
-            logging.error(f"Analysis error: {e}")
-            return {"error": str(e)}
+            logging.error(f"Operation error: {e}")
+            return {"error": str(e), "traceback": str(e)}
     
-    def _group_analysis(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Group by analysis"""
-        group_by = params.get('group_by')
-        aggregate = params.get('aggregate', 'sum')
+    def _edit_cell(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Edit a specific cell by row/column location"""
+        row = params.get('row')
         column = params.get('column')
+        value = params.get('value')
         
-        if group_by not in self.data.columns:
-            return {"error": f"Column '{group_by}' not found"}
+        if column not in self.data.columns:
+            return {"error": f"Column '{column}' not found in {list(self.data.columns)}"}
         
-        if column and column not in self.data.columns:
-            return {"error": f"Column '{column}' not found"}
+        if row >= len(self.data):
+            return {"error": f"Row {row} out of range (max: {len(self.data)-1})"}
         
-        grouped = self.data.groupby(group_by)
+        old_value = self.data.loc[row, column]
+        self.data.loc[row, column] = value
         
-        if column:
-            if aggregate == 'sum':
-                result = grouped[column].sum()
-            elif aggregate == 'mean':
-                result = grouped[column].mean()
-            elif aggregate == 'count':
-                result = grouped[column].count()
-            else:
-                result = grouped[column].sum()
-        else:
-            result = grouped.size()
-        
-        # Convert numpy types to Python native types for JSON serialization
         return {
-            "data": {str(k): float(v) if isinstance(v, (np.integer, np.floating)) else v 
-                    for k, v in result.to_dict().items()},
-            "labels": [str(label) for label in result.index.tolist()],
-            "values": [float(v) if isinstance(v, (np.integer, np.floating)) else v 
-                      for v in result.values.tolist()]
+            "success": True,
+            "old_value": self._safe_json_value(old_value),
+            "new_value": self._safe_json_value(value),
+            "location": f"Row {row}, Column '{column}'"
         }
     
-    def _filter_analysis(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Filter data analysis"""
+    def _create_column(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Create new column with values from existing columns"""
+        column_name = params.get('column_name')
+        source_columns = params.get('source_columns', [])
+        operation = params.get('operation', 'concat')
+        formula = params.get('formula')
+        
+        if not column_name:
+            return {"error": "Column name is required"}
+        
+        try:
+            if formula:
+                # Execute custom formula
+                self.data[column_name] = self.data.eval(formula)
+            elif operation == 'concat':
+                self.data[column_name] = self.data[source_columns].astype(str).agg(' '.join, axis=1)
+            elif operation == 'sum':
+                self.data[column_name] = self.data[source_columns].sum(axis=1)
+            elif operation == 'mean':
+                self.data[column_name] = self.data[source_columns].mean(axis=1)
+            elif operation == 'max':
+                self.data[column_name] = self.data[source_columns].max(axis=1)
+            elif operation == 'min':
+                self.data[column_name] = self.data[source_columns].min(axis=1)
+            else:
+                return {"error": f"Unknown operation: {operation}"}
+            
+            return {
+                "success": True,
+                "column_name": column_name,
+                "operation": operation,
+                "preview": self._safe_json_convert(self.data[[column_name]].head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Column creation failed: {str(e)}"}
+    
+    def _derive_features(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Create multiple derived features intelligently"""
+        feature_type = params.get('feature_type', 'basic')
+        target_columns = params.get('columns', [])
+        
+        if not target_columns:
+            target_columns = self.data.select_dtypes(include=[np.number]).columns.tolist()
+        
+        derived_features = {}
+        
+        try:
+            for col in target_columns:
+                if col not in self.data.columns:
+                    continue
+                
+                if feature_type in ['basic', 'all']:
+                    # Basic statistical features
+                    if self.data[col].dtype in ['int64', 'float64']:
+                        derived_features[f'{col}_squared'] = self.data[col] ** 2
+                        derived_features[f'{col}_log'] = np.log1p(self.data[col].abs())
+                        derived_features[f'{col}_zscore'] = (self.data[col] - self.data[col].mean()) / self.data[col].std()
+                
+                if feature_type in ['rolling', 'all']:
+                    # Rolling window features
+                    if len(self.data) > 5:
+                        derived_features[f'{col}_rolling_mean_3'] = self.data[col].rolling(3).mean()
+                        derived_features[f'{col}_rolling_std_3'] = self.data[col].rolling(3).std()
+                
+                if feature_type in ['lag', 'all']:
+                    # Lag features
+                    derived_features[f'{col}_lag_1'] = self.data[col].shift(1)
+                    derived_features[f'{col}_lag_2'] = self.data[col].shift(2)
+            
+            # Add derived features to dataframe
+            for name, values in derived_features.items():
+                self.data[name] = values
+            
+            return {
+                "success": True,
+                "features_created": list(derived_features.keys()),
+                "feature_count": len(derived_features),
+                "data_shape": self.data.shape
+            }
+        except Exception as e:
+            return {"error": f"Feature derivation failed: {str(e)}"}
+    
+    def _apply_formula(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply Excel-like formulas to data"""
+        formula = params.get('formula')
+        target_column = params.get('target_column')
+        
+        if not formula or not target_column:
+            return {"error": "Formula and target_column are required"}
+        
+        try:
+            # Convert Excel-like formulas to pandas operations
+            processed_formula = self._convert_excel_formula(formula)
+            
+            # Execute formula
+            if processed_formula.startswith('='):
+                processed_formula = processed_formula[1:]  # Remove = sign
+            
+            self.data[target_column] = self.data.eval(processed_formula)
+            
+            return {
+                "success": True,
+                "formula": formula,
+                "processed_formula": processed_formula,
+                "target_column": target_column,
+                "preview": self._safe_json_convert(self.data[[target_column]].head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Formula application failed: {str(e)}"}
+    
+    def _generate_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate pandas code for complex operations"""
+        operation_type = params.get('operation_type')
+        description = params.get('description', '')
+        
+        code_templates = {
+            'data_cleaning': """
+# Data Cleaning Code
+df = df.dropna()  # Remove null values
+df = df.drop_duplicates()  # Remove duplicates
+df = df.reset_index(drop=True)  # Reset index
+            """,
+            'feature_engineering': f"""
+# Feature Engineering Code
+# Create new features based on existing data
+{self._generate_feature_code()}
+            """,
+            'aggregation': """
+# Aggregation Code
+result = df.groupby('group_column').agg({
+    'numeric_column': ['sum', 'mean', 'count'],
+    'another_column': 'max'
+}).reset_index()
+            """,
+            'pivot': """
+# Pivot Table Code
+pivot_result = df.pivot_table(
+    values='value_column',
+    index='row_column',
+    columns='col_column',
+    aggfunc='sum',
+    fill_value=0
+)
+            """
+        }
+        
+        code = code_templates.get(operation_type, f"# Custom operation: {description}")
+        
+        return {
+            "success": True,
+            "operation_type": operation_type,
+            "generated_code": code,
+            "description": description
+        }
+    
+    def _execute_code(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute custom pandas code safely"""
+        code = params.get('code')
+        
+        if not code:
+            return {"error": "Code is required"}
+        
+        try:
+            # Create safe execution environment
+            safe_globals = {
+                'df': self.data,
+                'pd': pd,
+                'np': np,
+                'datetime': datetime,
+                'timedelta': timedelta
+            }
+            
+            exec(code, safe_globals)
+            
+            # Update data if df was modified
+            if 'df' in safe_globals:
+                self.data = safe_globals['df']
+            
+            return {
+                "success": True,
+                "code_executed": code,
+                "data_shape": self.data.shape,
+                "preview": self._safe_json_convert(self.data.head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Code execution failed: {str(e)}"}
+    
+    def _batch_edit(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Batch edit multiple cells"""
+        edits = params.get('edits', [])  # List of {row, column, value}
+        
+        if not edits:
+            return {"error": "No edits provided"}
+        
+        changes = []
+        for edit in edits:
+            row, column, value = edit.get('row'), edit.get('column'), edit.get('value')
+            
+            if column in self.data.columns and row < len(self.data):
+                old_value = self.data.loc[row, column]
+                self.data.loc[row, column] = value
+                changes.append({
+                    "row": row,
+                    "column": column,
+                    "old_value": self._safe_json_value(old_value),
+                    "new_value": self._safe_json_value(value)
+                })
+        
+        return {
+            "success": True,
+            "changes_made": len(changes),
+            "changes": changes
+        }
+    
+    def _smart_fill(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Smart fill missing values"""
         column = params.get('column')
-        condition = params.get('condition', '>')
-        value = params.get('value')
+        method = params.get('method', 'forward')
         
         if column not in self.data.columns:
             return {"error": f"Column '{column}' not found"}
         
-        if value == 'mean':
-            value = self.data[column].mean()
-        elif value == 'median':
-            value = self.data[column].median()
+        null_count_before = self.data[column].isnull().sum()
         
-        if condition == '>':
-            filtered_data = self.data[self.data[column] > value]
-        elif condition == '<':
-            filtered_data = self.data[self.data[column] < value]
-        elif condition == '==':
-            filtered_data = self.data[self.data[column] == value]
-        else:
-            filtered_data = self.data
+        if method == 'forward':
+            self.data[column] = self.data[column].fillna(method='ffill')
+        elif method == 'backward':
+            self.data[column] = self.data[column].fillna(method='bfill')
+        elif method == 'mean':
+            self.data[column] = self.data[column].fillna(self.data[column].mean())
+        elif method == 'median':
+            self.data[column] = self.data[column].fillna(self.data[column].median())
+        elif method == 'mode':
+            self.data[column] = self.data[column].fillna(self.data[column].mode()[0])
         
-        # Convert to JSON-serializable format
-        records = self._convert_records_to_json_serializable(filtered_data.to_dict('records'))
-        preview = self._convert_records_to_json_serializable(filtered_data.head(10).to_dict('records'))
+        null_count_after = self.data[column].isnull().sum()
         
         return {
-            "data": records,
-            "count": len(filtered_data),
-            "preview": preview
+            "success": True,
+            "column": column,
+            "method": method,
+            "nulls_filled": null_count_before - null_count_after,
+            "remaining_nulls": null_count_after
         }
     
-    def _calculate_analysis(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Calculate statistics"""
-        column = params.get('column')
-        operation = params.get('operation', 'describe')
+    # Utility methods
+    def _convert_excel_formula(self, formula: str) -> str:
+        """Convert Excel-like formulas to pandas expressions"""
+        # Simple conversions
+        conversions = {
+            'SUM(': 'sum(',
+            'AVERAGE(': 'mean(',
+            'MAX(': 'max(',
+            'MIN(': 'min(',
+            'COUNT(': 'count(',
+        }
         
-        if column and column not in self.data.columns:
-            return {"error": f"Column '{column}' not found"}
+        for excel_func, pandas_func in conversions.items():
+            formula = formula.replace(excel_func, pandas_func)
         
-        if operation == 'describe':
-            if column:
-                result = self.data[column].describe()
-            else:
-                result = self.data.describe()
-            
-            # Convert to JSON-serializable format
-            if hasattr(result, 'to_dict'):
-                stats = self._convert_dict_to_json_serializable(result.to_dict())
-            else:
-                stats = result
-                
-        elif operation == 'correlation':
-            result = self.data.corr()
-            stats = self._convert_dict_to_json_serializable(result.to_dict())
+        return formula
+    
+    def _generate_feature_code(self) -> str:
+        """Generate feature engineering code based on current data"""
+        numeric_cols = self.data.select_dtypes(include=[np.number]).columns.tolist()
+        
+        if not numeric_cols:
+            return "# No numeric columns found for feature engineering"
+        
+        code = f"""
+# Feature engineering for columns: {numeric_cols}
+for col in {numeric_cols}:
+    df[f'{{col}}_squared'] = df[col] ** 2
+    df[f'{{col}}_log'] = np.log1p(df[col].abs())
+    df[f'{{col}}_zscore'] = (df[col] - df[col].mean()) / df[col].std()
+        """
+        return code
+    
+    def _log_action(self, action: str, params: Dict[str, Any]):
+        """Log actions for history tracking"""
+        self.history.append({
+            "timestamp": datetime.now().isoformat(),
+            "action": action,
+            "parameters": params
+        })
+    
+    def _safe_json_convert(self, data):
+        """Convert data to JSON-safe format"""
+        if isinstance(data, list):
+            return [self._safe_json_convert(item) for item in data]
+        elif isinstance(data, dict):
+            return {str(k): self._safe_json_convert(v) for k, v in data.items()}
         else:
-            return {"error": f"Unknown operation: {operation}"}
-        
-        return {"statistics": stats}
+            return self._safe_json_value(data)
     
-    def _chart_data(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Prepare data for charts"""
-        x_column = params.get('x_column')
-        y_column = params.get('y_column')
-        
-        if x_column not in self.data.columns:
-            return {"error": f"Column '{x_column}' not found"}
-        
-        if y_column not in self.data.columns:
-            return {"error": f"Column '{y_column}' not found"}
-        
-        # Convert to JSON-serializable format
-        labels = [str(x) for x in self.data[x_column].tolist()]
-        values = [float(v) if isinstance(v, (np.integer, np.floating)) else v 
-                 for v in self.data[y_column].tolist()]
-        
-        return {
-            "labels": labels,
-            "values": values
-        }
+    def _safe_json_value(self, value):
+        """Convert single value to JSON-safe format"""
+        if pd.isna(value):
+            return None
+        elif isinstance(value, (np.integer, np.floating)):
+            return float(value)
+        elif isinstance(value, np.bool_):
+            return bool(value)
+        elif isinstance(value, (pd.Timestamp, np.datetime64)):
+            return str(value)
+        else:
+            return value
     
-    def _convert_records_to_json_serializable(self, records: List[Dict]) -> List[Dict]:
-        """Convert pandas records to JSON-serializable format"""
-        json_records = []
-        for record in records:
-            json_record = {}
-            for key, value in record.items():
-                if pd.isna(value):
-                    json_record[key] = None
-                elif isinstance(value, (np.integer, np.floating)):
-                    json_record[key] = float(value)
-                elif isinstance(value, np.bool_):
-                    json_record[key] = bool(value)
-                elif isinstance(value, (pd.Timestamp, np.datetime64)):
-                    json_record[key] = str(value)
-                else:
-                    json_record[key] = value
-            json_records.append(json_record)
-        return json_records
+    def get_history(self) -> List[Dict[str, Any]]:
+        """Get operation history"""
+        return self.history
     
-    def _convert_dict_to_json_serializable(self, data: Dict) -> Dict:
-        """Convert dictionary with numpy types to JSON-serializable format"""
-        json_dict = {}
-        for key, value in data.items():
-            # Convert key to string if it's not already
-            str_key = str(key)
-            
-            if isinstance(value, dict):
-                json_dict[str_key] = self._convert_dict_to_json_serializable(value)
-            elif pd.isna(value):
-                json_dict[str_key] = None
-            elif isinstance(value, (np.integer, np.floating)):
-                json_dict[str_key] = float(value)
-            elif isinstance(value, np.bool_):
-                json_dict[str_key] = bool(value)
-            elif isinstance(value, (pd.Timestamp, np.datetime64)):
-                json_dict[str_key] = str(value)
+    def undo_last_operation(self) -> Dict[str, Any]:
+        """Undo last operation by restoring backup"""
+        if self.backup_data is not None:
+            self.data = self.backup_data.copy()
+            return {"success": True, "message": "Last operation undone"}
+        return {"error": "No backup data available"}
+    
+    def save_data(self, file_path: str) -> Dict[str, Any]:
+        """Save current data to file"""
+        try:
+            if file_path.endswith('.csv'):
+                self.data.to_csv(file_path, index=False)
             else:
-                json_dict[str_key] = value
-                
-        return json_dict
+                self.data.to_excel(file_path, index=False)
+            
+            return {"success": True, "file_path": file_path, "shape": self.data.shape}
+        except Exception as e:
+            return {"error": f"Save failed: {str(e)}"}
