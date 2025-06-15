@@ -346,6 +346,350 @@ pivot_result = df.pivot_table(
             "nulls_filled": null_count_before - null_count_after,
             "remaining_nulls": null_count_after
         }
+    def _filter_data(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Filter data based on conditions"""
+        column = params.get('column')
+        condition = params.get('condition')
+        value = params.get('value')
+        operator = params.get('operator', '==')
+        
+        if not column or column not in self.data.columns:
+            return {"error": f"Column '{column}' not found"}
+        
+        try:
+            original_rows = len(self.data)
+            
+            if operator == '==':
+                mask = self.data[column] == value
+            elif operator == '!=':
+                mask = self.data[column] != value
+            elif operator == '>':
+                mask = self.data[column] > value
+            elif operator == '<':
+                mask = self.data[column] < value
+            elif operator == '>=':
+                mask = self.data[column] >= value
+            elif operator == '<=':
+                mask = self.data[column] <= value
+            elif operator == 'contains':
+                mask = self.data[column].astype(str).str.contains(str(value), na=False)
+            elif operator == 'startswith':
+                mask = self.data[column].astype(str).str.startswith(str(value), na=False)
+            elif operator == 'endswith':
+                mask = self.data[column].astype(str).str.endswith(str(value), na=False)
+            else:
+                return {"error": f"Unknown operator: {operator}"}
+            
+            self.data = self.data[mask].reset_index(drop=True)
+            filtered_rows = len(self.data)
+            
+            return {
+                "success": True,
+                "original_rows": original_rows,
+                "filtered_rows": filtered_rows,
+                "rows_removed": original_rows - filtered_rows,
+                "filter_condition": f"{column} {operator} {value}",
+                "preview": self._safe_json_convert(self.data.head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Filter operation failed: {str(e)}"}
+    
+    def _group_aggregate(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Group data and perform aggregations"""
+        group_by = params.get('group_by')
+        agg_functions = params.get('agg_functions', {})
+        
+        if not group_by or group_by not in self.data.columns:
+            return {"error": f"Group by column '{group_by}' not found"}
+        
+        if not agg_functions:
+            return {"error": "Aggregation functions are required"}
+        
+        try:
+            grouped_data = self.data.groupby(group_by).agg(agg_functions).reset_index()
+            
+            # Flatten column names if multi-level
+            if isinstance(grouped_data.columns, pd.MultiIndex):
+                grouped_data.columns = ['_'.join(col).strip() for col in grouped_data.columns.values]
+            
+            # Replace original data with grouped data
+            self.data = grouped_data
+            
+            return {
+                "success": True,
+                "group_by": group_by,
+                "aggregations": agg_functions,
+                "result_shape": self.data.shape,
+                "preview": self._safe_json_convert(self.data.head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Group aggregation failed: {str(e)}"}
+    
+    def _pivot_table(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Create pivot table"""
+        values = params.get('values')
+        index = params.get('index')
+        columns = params.get('columns')
+        aggfunc = params.get('aggfunc', 'sum')
+        fill_value = params.get('fill_value', 0)
+        
+        if not all([values, index]):
+            return {"error": "Values and index are required for pivot table"}
+        
+        try:
+            pivot_data = self.data.pivot_table(
+                values=values,
+                index=index,
+                columns=columns,
+                aggfunc=aggfunc,
+                fill_value=fill_value
+            ).reset_index()
+            
+            # Replace original data with pivot table
+            self.data = pivot_data
+            
+            return {
+                "success": True,
+                "values": values,
+                "index": index,
+                "columns": columns,
+                "aggfunc": aggfunc,
+                "result_shape": self.data.shape,
+                "preview": self._safe_json_convert(self.data.head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Pivot table creation failed: {str(e)}"}
+    
+    def _merge_data(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge with another dataset"""
+        # This would require loading another dataset
+        # For now, return not implemented
+        return {"error": "Merge data functionality requires additional dataset loading capabilities"}
+    
+    def _clean_data(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Clean data with various operations"""
+        operations = params.get('operations', ['remove_nulls', 'remove_duplicates'])
+        
+        try:
+            original_shape = self.data.shape
+            results = {}
+            
+            if 'remove_nulls' in operations:
+                null_rows_before = self.data.isnull().any(axis=1).sum()
+                self.data = self.data.dropna()
+                null_rows_after = self.data.isnull().any(axis=1).sum()
+                results['nulls_removed'] = null_rows_before - null_rows_after
+            
+            if 'remove_duplicates' in operations:
+                duplicates_before = self.data.duplicated().sum()
+                self.data = self.data.drop_duplicates()
+                duplicates_after = self.data.duplicated().sum()
+                results['duplicates_removed'] = duplicates_before - duplicates_after
+            
+            if 'strip_whitespace' in operations:
+                string_columns = self.data.select_dtypes(include=['object']).columns
+                for col in string_columns:
+                    self.data[col] = self.data[col].astype(str).str.strip()
+                results['whitespace_stripped'] = len(string_columns)
+            
+            if 'standardize_case' in operations:
+                case_type = params.get('case_type', 'lower')
+                string_columns = self.data.select_dtypes(include=['object']).columns
+                for col in string_columns:
+                    if case_type == 'lower':
+                        self.data[col] = self.data[col].astype(str).str.lower()
+                    elif case_type == 'upper':
+                        self.data[col] = self.data[col].astype(str).str.upper()
+                    elif case_type == 'title':
+                        self.data[col] = self.data[col].astype(str).str.title()
+                results['case_standardized'] = len(string_columns)
+            
+            self.data = self.data.reset_index(drop=True)
+            
+            return {
+                "success": True,
+                "operations": operations,
+                "original_shape": original_shape,
+                "new_shape": self.data.shape,
+                "results": results,
+                "preview": self._safe_json_convert(self.data.head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Data cleaning failed: {str(e)}"}
+    
+    def _transform_data(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Transform data with various operations"""
+        transformation = params.get('transformation')
+        columns = params.get('columns', [])
+        
+        if not transformation:
+            return {"error": "Transformation type is required"}
+        
+        try:
+            if transformation == 'normalize':
+                # Min-max normalization
+                for col in columns:
+                    if col in self.data.columns and self.data[col].dtype in ['int64', 'float64']:
+                        min_val = self.data[col].min()
+                        max_val = self.data[col].max()
+                        self.data[f'{col}_normalized'] = (self.data[col] - min_val) / (max_val - min_val)
+            
+            elif transformation == 'standardize':
+                # Z-score standardization
+                for col in columns:
+                    if col in self.data.columns and self.data[col].dtype in ['int64', 'float64']:
+                        mean_val = self.data[col].mean()
+                        std_val = self.data[col].std()
+                        self.data[f'{col}_standardized'] = (self.data[col] - mean_val) / std_val
+            
+            elif transformation == 'log_transform':
+                # Log transformation
+                for col in columns:
+                    if col in self.data.columns and self.data[col].dtype in ['int64', 'float64']:
+                        self.data[f'{col}_log'] = np.log1p(self.data[col].abs())
+            
+            elif transformation == 'one_hot_encode':
+                # One-hot encoding for categorical variables
+                for col in columns:
+                    if col in self.data.columns:
+                        dummies = pd.get_dummies(self.data[col], prefix=col)
+                        self.data = pd.concat([self.data, dummies], axis=1)
+            
+            else:
+                return {"error": f"Unknown transformation: {transformation}"}
+            
+            return {
+                "success": True,
+                "transformation": transformation,
+                "columns": columns,
+                "new_shape": self.data.shape,
+                "preview": self._safe_json_convert(self.data.head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Data transformation failed: {str(e)}"}
+    
+    def _statistical_analysis(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Perform statistical analysis"""
+        analysis_type = params.get('analysis_type', 'descriptive')
+        columns = params.get('columns', [])
+        
+        if not columns:
+            columns = self.data.select_dtypes(include=[np.number]).columns.tolist()
+        
+        try:
+            results = {}
+            
+            if analysis_type == 'descriptive':
+                desc_stats = self.data[columns].describe()
+                results['descriptive_stats'] = self._safe_json_convert(desc_stats.to_dict())
+            
+            elif analysis_type == 'correlation':
+                corr_matrix = self.data[columns].corr()
+                results['correlation_matrix'] = self._safe_json_convert(corr_matrix.to_dict())
+            
+            elif analysis_type == 'missing_values':
+                missing_info = {
+                    col: {
+                        'missing_count': int(self.data[col].isnull().sum()),
+                        'missing_percentage': float(self.data[col].isnull().sum() / len(self.data) * 100)
+                    }
+                    for col in self.data.columns
+                }
+                results['missing_values'] = missing_info
+            
+            elif analysis_type == 'data_types':
+                type_info = {
+                    col: {
+                        'dtype': str(self.data[col].dtype),
+                        'unique_values': int(self.data[col].nunique()),
+                        'sample_values': self.data[col].dropna().head(3).tolist()
+                    }
+                    for col in self.data.columns
+                }
+                results['data_types'] = type_info
+            
+            else:
+                return {"error": f"Unknown analysis type: {analysis_type}"}
+            
+            return {
+                "success": True,
+                "analysis_type": analysis_type,
+                "columns_analyzed": columns,
+                "results": results
+            }
+        except Exception as e:
+            return {"error": f"Statistical analysis failed: {str(e)}"}
+    
+    def _create_derived_column(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Create derived column with advanced logic"""
+        column_name = params.get('column_name')
+        derivation_type = params.get('derivation_type')
+        source_columns = params.get('source_columns', [])
+        custom_logic = params.get('custom_logic')
+        
+        if not column_name:
+            return {"error": "Column name is required"}
+        
+        try:
+            if derivation_type == 'conditional':
+                # Create conditional column based on custom logic
+                condition = params.get('condition')
+                true_value = params.get('true_value')
+                false_value = params.get('false_value')
+                
+                if condition and true_value is not None and false_value is not None:
+                    self.data[column_name] = np.where(
+                        self.data.eval(condition), 
+                        true_value, 
+                        false_value
+                    )
+            
+            elif derivation_type == 'binning':
+                # Create bins for continuous variables
+                source_col = source_columns[0] if source_columns else None
+                bins = params.get('bins', 5)
+                labels = params.get('labels')
+                
+                if source_col and source_col in self.data.columns:
+                    self.data[column_name] = pd.cut(
+                        self.data[source_col], 
+                        bins=bins, 
+                        labels=labels
+                    )
+            
+            elif derivation_type == 'date_features':
+                # Extract date features
+                source_col = source_columns[0] if source_columns else None
+                if source_col and source_col in self.data.columns:
+                    date_col = pd.to_datetime(self.data[source_col])
+                    feature_type = params.get('date_feature', 'year')
+                    
+                    if feature_type == 'year':
+                        self.data[column_name] = date_col.dt.year
+                    elif feature_type == 'month':
+                        self.data[column_name] = date_col.dt.month
+                    elif feature_type == 'day':
+                        self.data[column_name] = date_col.dt.day
+                    elif feature_type == 'weekday':
+                        self.data[column_name] = date_col.dt.day_name()
+                    elif feature_type == 'quarter':
+                        self.data[column_name] = date_col.dt.quarter
+            
+            elif derivation_type == 'custom' and custom_logic:
+                # Execute custom logic
+                self.data[column_name] = self.data.eval(custom_logic)
+            
+            else:
+                return {"error": f"Unknown derivation type: {derivation_type}"}
+            
+            return {
+                "success": True,
+                "column_name": column_name,
+                "derivation_type": derivation_type,
+                "preview": self._safe_json_convert(self.data[[column_name]].head().to_dict('records'))
+            }
+        except Exception as e:
+            return {"error": f"Derived column creation failed: {str(e)}"}
     
     # Utility methods
     def _convert_excel_formula(self, formula: str) -> str:

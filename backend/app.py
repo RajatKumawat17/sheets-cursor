@@ -1,6 +1,8 @@
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Dict, Any, List, Optional, Union
 import json
 import asyncio
 from pathlib import Path
@@ -19,6 +21,57 @@ llm_client = LLMClient()
 
 # Create uploads directory
 Path("uploads").mkdir(exist_ok=True)
+
+# Pydantic models for request validation
+class OperationRequest(BaseModel):
+    action: str
+    parameters: Dict[str, Any]
+
+class FilterRequest(BaseModel):
+    column: str
+    operator: str = "=="
+    value: Union[str, int, float]
+
+class GroupAggregateRequest(BaseModel):
+    group_by: str
+    agg_functions: Dict[str, str]
+
+class CreateColumnRequest(BaseModel):
+    column_name: str
+    source_columns: Optional[List[str]] = []
+    operation: str = "concat"
+    formula: Optional[str] = None
+
+class CleanDataRequest(BaseModel):
+    operations: List[str] = ["remove_nulls", "remove_duplicates"]
+    case_type: Optional[str] = "lower"
+
+class TransformDataRequest(BaseModel):
+    transformation: str
+    columns: List[str]
+
+class StatisticalAnalysisRequest(BaseModel):
+    analysis_type: str = "descriptive"
+    columns: Optional[List[str]] = []
+
+class SmartFillRequest(BaseModel):
+    column: str
+    method: str = "forward"
+
+class BatchEditRequest(BaseModel):
+    edits: List[Dict[str, Any]]
+
+class DerivedColumnRequest(BaseModel):
+    column_name: str
+    derivation_type: str
+    source_columns: Optional[List[str]] = []
+    custom_logic: Optional[str] = None
+    condition: Optional[str] = None
+    true_value: Optional[Any] = None
+    false_value: Optional[Any] = None
+    bins: Optional[int] = 5
+    labels: Optional[List[str]] = None
+    date_feature: Optional[str] = "year"
 
 # Serve static files
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
@@ -74,6 +127,262 @@ async def get_data_preview(rows: int = 10):
         }
     except Exception as e:
         logger.error(f"Preview error: {e}")
+        return {"error": str(e)}
+
+# New dedicated endpoints for specific operations
+@app.post("/operations/filter")
+async def filter_data(request: FilterRequest):
+    """Filter data based on conditions"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'filter_data',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/group-aggregate")
+async def group_aggregate(request: GroupAggregateRequest):
+    """Group data and perform aggregations"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'group_aggregate',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/create-column")
+async def create_column(request: CreateColumnRequest):
+    """Create new column"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'create_column',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/clean-data")
+async def clean_data(request: CleanDataRequest):
+    """Clean data with various operations"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'clean_data',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/transform-data")
+async def transform_data(request: TransformDataRequest):
+    """Transform data"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'transform_data',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/statistical-analysis")
+async def statistical_analysis(request: StatisticalAnalysisRequest):
+    """Perform statistical analysis"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'statistical_analysis',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/smart-fill")
+async def smart_fill(request: SmartFillRequest):
+    """Smart fill missing values"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'smart_fill',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/batch-edit")
+async def batch_edit(request: BatchEditRequest):
+    """Batch edit multiple cells"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'batch_edit',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/derived-column")
+async def create_derived_column(request: DerivedColumnRequest):
+    """Create derived column with advanced logic"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'create_derived_column',
+        'parameters': request.dict()
+    })
+    return result
+
+@app.post("/operations/pivot-table")
+async def create_pivot_table(values: str, index: str, columns: Optional[str] = None, 
+                           aggfunc: str = "sum", fill_value: Union[int, float] = 0):
+    """Create pivot table"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'pivot_table',
+        'parameters': {
+            'values': values,
+            'index': index,
+            'columns': columns,
+            'aggfunc': aggfunc,
+            'fill_value': fill_value
+        }
+    })
+    return result
+
+@app.post("/operations/derive-features")
+async def derive_features(feature_type: str = "basic", columns: Optional[List[str]] = None):
+    """Create multiple derived features"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation({
+        'action': 'derive_features',
+        'parameters': {
+            'feature_type': feature_type,
+            'columns': columns or []
+        }
+    })
+    return result
+
+@app.post("/operations/execute")
+async def execute_operation(request: OperationRequest):
+    """Generic operation executor"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    result = processor.execute_smart_operation(request.dict())
+    return result
+
+@app.get("/operations/available")
+async def get_available_operations():
+    """Get list of available operations with their parameters"""
+    return {
+        "operations": {
+            "filter_data": {
+                "description": "Filter data based on conditions",
+                "parameters": ["column", "operator", "value"],
+                "operators": ["==", "!=", ">", "<", ">=", "<=", "contains", "startswith", "endswith"]
+            },
+            "group_aggregate": {
+                "description": "Group data and perform aggregations",
+                "parameters": ["group_by", "agg_functions"],
+                "agg_functions": ["sum", "mean", "count", "max", "min", "std"]
+            },
+            "create_column": {
+                "description": "Create new column",
+                "parameters": ["column_name", "source_columns", "operation", "formula"],
+                "operations": ["concat", "sum", "mean", "max", "min"]
+            },
+            "clean_data": {
+                "description": "Clean data with various operations",
+                "parameters": ["operations", "case_type"],
+                "operations": ["remove_nulls", "remove_duplicates", "strip_whitespace", "standardize_case"]
+            },
+            "transform_data": {
+                "description": "Transform data",
+                "parameters": ["transformation", "columns"],
+                "transformations": ["normalize", "standardize", "log_transform", "one_hot_encode"]
+            },
+            "statistical_analysis": {
+                "description": "Perform statistical analysis",
+                "parameters": ["analysis_type", "columns"],
+                "analysis_types": ["descriptive", "correlation", "missing_values", "data_types"]
+            },
+            "smart_fill": {
+                "description": "Smart fill missing values",
+                "parameters": ["column", "method"],
+                "methods": ["forward", "backward", "mean", "median", "mode"]
+            },
+            "derive_features": {
+                "description": "Create multiple derived features",
+                "parameters": ["feature_type", "columns"],
+                "feature_types": ["basic", "rolling", "lag", "all"]
+            },
+            "pivot_table": {
+                "description": "Create pivot table",
+                "parameters": ["values", "index", "columns", "aggfunc", "fill_value"]
+            },
+            "create_derived_column": {
+                "description": "Create derived column with advanced logic",
+                "parameters": ["column_name", "derivation_type", "source_columns"],
+                "derivation_types": ["conditional", "binning", "date_features", "custom"]
+            }
+        }
+    }
+
+@app.get("/data/summary")
+async def get_data_summary():
+    """Get comprehensive data summary"""
+    if processor.data is None:
+        raise HTTPException(status_code=400, detail="No data loaded")
+    
+    try:
+        # Basic info
+        numeric_columns = processor.data.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        categorical_columns = processor.data.select_dtypes(include=['object']).columns.tolist()
+        
+        summary = {
+            "basic_info": {
+                "shape": processor.data.shape,
+                "columns": processor.data.columns.tolist(),
+                "numeric_columns": numeric_columns,
+                "categorical_columns": categorical_columns,
+                "memory_usage": f"{processor.data.memory_usage(deep=True).sum() / 1024**2:.2f} MB"
+            },
+            "missing_values": processor.data.isnull().sum().to_dict(),
+            "data_types": {col: str(dtype) for col, dtype in processor.data.dtypes.items()}
+        }
+        
+        # Add descriptive statistics for numeric columns
+        if numeric_columns:
+            desc_stats = processor.data[numeric_columns].describe()
+            summary["descriptive_stats"] = processor._safe_json_convert(desc_stats.to_dict())
+        
+        # Add value counts for categorical columns (top 5 values each)
+        if categorical_columns:
+            categorical_info = {}
+            for col in categorical_columns[:5]:  # Limit to first 5 categorical columns
+                value_counts = processor.data[col].value_counts().head().to_dict()
+                categorical_info[col] = {
+                    "unique_count": int(processor.data[col].nunique()),
+                    "top_values": processor._safe_json_convert(value_counts)
+                }
+            summary["categorical_info"] = categorical_info
+        
+        return {
+            "success": True,
+            "summary": summary
+        }
+    except Exception as e:
+        logger.error(f"Summary error: {e}")
         return {"error": str(e)}
 
 @app.get("/suggestions")
@@ -175,7 +484,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     "instruction": instruction
                 }))
                 
-                # Execute smart operation (updated method name)
+                # Execute smart operation
                 result = processor.execute_smart_operation(instruction)
                 
                 # Enhanced response with data preview if operation was successful
@@ -234,10 +543,13 @@ async def startup_event():
     logger.info("  POST /upload - Upload Excel/CSV files")
     logger.info("  GET /data/info - Get data information")
     logger.info("  GET /data/preview - Get data preview")
+    logger.info("  GET /data/summary - Get comprehensive data summary")
     logger.info("  GET /suggestions - Get smart suggestions")
     logger.info("  GET /history - Get operation history")
     logger.info("  POST /undo - Undo last operation")
     logger.info("  POST /save - Save current data")
+    logger.info("  GET /operations/available - Get available operations")
+    logger.info("  POST /operations/* - Execute specific operations")
     logger.info("  WebSocket /ws - Real-time analysis")
 
 @app.on_event("shutdown")
@@ -273,5 +585,5 @@ if __name__ == "__main__":
         host="localhost", 
         port=8000,
         log_level="info",
-        reload=True  # Enable auto-reload for development
+        # reload=True  # Enable auto-reload for development
     )
