@@ -3,53 +3,1064 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel MCP Tool</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>Excel MCP Tool - Enhanced</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            font-size: 0.9rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4ade80;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .toolbar button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .toolbar button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(238, 90, 36, 0.3);
+        }
+
+        .toolbar button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+            height: calc(100vh - 200px);
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel h3 {
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .data-info {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .data-table-container {
+            flex: 1;
+            overflow: auto;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .data-table th, .data-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 150px;
+        }
+
+        .data-table th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        .data-table td {
+            cursor: pointer;
+        }
+
+        .data-table td:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            margin-left: auto;
+        }
+
+        .ai-message {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .message.processing {
+            opacity: 0.7;
+            animation: pulse 1.5s infinite;
+        }
+
+        .confidence-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            margin-left: 8px;
+        }
+
+        .confidence-high { background: rgba(34, 197, 94, 0.3); }
+        .confidence-medium { background: rgba(251, 191, 36, 0.3); }
+        .confidence-low { background: rgba(239, 68, 68, 0.3); }
+
+        .input-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .suggestion-chip {
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .suggestion-chip:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        #commandInput {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+        }
+
+        #commandInput::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        #sendBtn {
+            background: linear-gradient(45deg, #4facfe, #00f2fe);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        #sendBtn:hover {
+            transform: translateY(-1px);
+        }
+
+        .history-container {
+            flex: 1;
+            overflow-y: auto;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .history-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border-left: 3px solid #4facfe;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .history-command {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .history-time {
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+
+        .chart-container {
+            height: 300px;
+            position: relative;
+        }
+
+        #chartCanvas {
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .error {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .success {
+            color: #22c55e;
+            background: rgba(34, 197, 94, 0.1);
+        }
+
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            
+            .toolbar {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>📊 Excel MCP Tool</h1>
-            <div class="ai-badge">🤖 AI Assistant</div>
-        </header>
-        
-        <div class="upload-section">
-            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none;">
-            <button id="uploadBtn" class="upload-btn">Upload Excel/CSV File</button>
-            <div id="fileInfo" class="file-info"></div>
+        <div class="header">
+            <h1>📊 Excel MCP Tool - Enhanced</h1>
+            <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span id="connectionStatus">Connected</span>
+            </div>
         </div>
         
-        <div class="main-content">
-            <div class="left-panel">
-                <div class="data-preview">
-                    <h3>Data Preview</h3>
-                    <div id="dataTable"></div>
+        <div class="toolbar">
+            <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" style="display: none;">
+            <button id="uploadBtn">📁 Upload File</button>
+            <button id="undoBtn" disabled>↶ Undo</button>
+            <button id="saveBtn" disabled>💾 Save</button>
+            <button id="healthBtn">🔍 Health Check</button>
+            <button id="clearBtn">🗑️ Clear</button>
+        </div>
+        
+        <div class="main-grid">
+            <!-- Data Panel -->
+            <div class="panel">
+                <h3>📋 Data Overview</h3>
+                <div id="dataInfo" class="data-info">
+                    <p>No file loaded</p>
                 </div>
-                
-                <div class="data-stats">
-                    <h3>Data Statistics</h3>
-                    <div id="dataStats"></div>
+                <div class="data-table-container">
+                    <table id="dataTable" class="data-table">
+                        <thead></thead>
+                        <tbody></tbody>
+                    </table>
                 </div>
             </div>
             
-            <div class="right-panel">
+            <!-- Chat Panel -->
+            <div class="panel">
+                <h3>💬 AI Assistant</h3>
                 <div class="chat-container">
                     <div id="chatMessages" class="chat-messages"></div>
-                    
-                    <div class="input-container">
-                        <input type="text" id="commandInput" placeholder="Ask me anything about your data..." />
-                        <button id="sendBtn">Send</button>
+                    <div class="input-section">
+                        <div id="suggestions" class="suggestions"></div>
+                        <div class="input-container">
+                            <input type="text" id="commandInput" placeholder="Ask me anything about your data..." />
+                            <button id="sendBtn">Send</button>
+                        </div>
                     </div>
                 </div>
-                
+            </div>
+            
+            <!-- Analysis Panel -->
+            <div class="panel">
+                <h3>📈 Analysis & History</h3>
                 <div class="chart-container">
                     <canvas id="chartCanvas"></canvas>
                 </div>
+                <div id="historyContainer" class="history-container"></div>
             </div>
         </div>
     </div>
     
-    <script src="/static/script.js"></script>
-</body>
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <script>
+        class EnhancedExcelMCPTool {
+            constructor() {
+                this.ws = null;
+                this.chart = null;
+                this.currentData = null;
+                this.operationHistory = [];
+                this.suggestions = [];
+                this.isProcessing = false;
+                
+                this.initializeEventListeners();
+                this.connectWebSocket();
+                this.loadSuggestions();
+            }
+            
+            initializeEventListeners() {
+                // File operations
+                document.getElementById('uploadBtn').addEventListener('click', () => 
+                    document.getElementById('fileInput').click()
+                );
+                document.getElementById('fileInput').addEventListener('change', (e) => 
+                    this.handleFileUpload(e)
+                );
+                
+                // Toolbar buttons
+                document.getElementById('undoBtn').addEventListener('click', () => this.undoOperation());
+                document.getElementById('saveBtn').addEventListener('click', () => this.saveData());
+                document.getElementById('healthBtn').addEventListener('click', () => this.checkHealth());
+                document.getElementById('clearBtn').addEventListener('click', () => this.clearData());
+                
+                // Chat interface
+                document.getElementById('sendBtn').addEventListener('click', () => this.sendCommand());
+                document.getElementById('commandInput').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendCommand();
+                    }
+                });
+                
+                // Suggestions
+                document.getElementById('suggestions').addEventListener('click', (e) => {
+                    if (e.target.classList.contains('suggestion-chip')) {
+                        document.getElementById('commandInput').value = e.target.textContent;
+                    }
+                });
+                
+                // Table cell editing
+                document.getElementById('dataTable').addEventListener('click', (e) => {
+                    if (e.target.tagName === 'TD') {
+                        this.handleCellClick(e.target);
+                    }
+                });
+            }
+            
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                this.ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.updateConnectionStatus('Connected', true);
+                };
+                
+                this.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    this.handleWebSocketMessage(data);
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateConnectionStatus('Error', false);
+                    this.addMessage('Connection error. Please refresh the page.', 'ai', 'error');
+                };
+                
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    this.updateConnectionStatus('Disconnected', false);
+                    setTimeout(() => this.connectWebSocket(), 3000);
+                };
+            }
+            
+            updateConnectionStatus(status, isConnected) {
+                const statusElement = document.getElementById('connectionStatus');
+                const statusDot = document.querySelector('.status-dot');
+                
+                statusElement.textContent = status;
+                statusDot.style.background = isConnected ? '#4ade80' : '#ef4444';
+            }
+            
+            async handleFileUpload(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                this.showLoading(true);
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                try {
+                    const response = await fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.currentData = result;
+                        this.displayDataInfo();
+                        this.displayDataPreview();
+                        this.loadSuggestions();
+                        this.addMessage(`File "${file.name}" uploaded successfully! 📊`, 'ai', 'success');
+                        this.enableButtons();
+                    } else {
+                        this.addMessage(`Error uploading file: ${result.error}`, 'ai', 'error');
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    this.addMessage('Error uploading file. Please try again.', 'ai', 'error');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+            
+            async displayDataInfo() {
+                try {
+                    const response = await fetch('/data/info');
+                    const info = await response.json();
+                    
+                    const infoDiv = document.getElementById('dataInfo');
+                    infoDiv.innerHTML = `
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <strong>📊 Shape:</strong> ${info.shape[0]} × ${info.shape[1]}<br>
+                                <strong>💾 Memory:</strong> ${info.memory_usage}
+                            </div>
+                            <div>
+                                <strong>🔢 Columns:</strong> ${info.columns.length}<br>
+                                <strong>❌ Nulls:</strong> ${Object.values(info.null_counts).reduce((a, b) => a + b, 0)}
+                            </div>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 0.85rem;">
+                            <strong>Column Types:</strong><br>
+                            ${Object.entries(info.dtypes).map(([col, type]) => 
+                                `<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; margin: 2px;">${col}: ${type}</span>`
+                            ).join(' ')}
+                        </div>
+                    `;
+                } catch (error) {
+                    console.error('Error fetching data info:', error);
+                }
+            }
+            
+            async displayDataPreview(rows = 10) {
+                try {
+                    const response = await fetch(`/data/preview?rows=${rows}`);
+                    const preview = await response.json();
+                    
+                    const table = document.getElementById('dataTable');
+                    const thead = table.querySelector('thead');
+                    const tbody = table.querySelector('tbody');
+                    
+                    // Clear existing content
+                    thead.innerHTML = '';
+                    tbody.innerHTML = '';
+                    
+                    if (preview.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="100%">No data to display</td></tr>';
+                        return;
+                    }
+                    
+                    // Create header
+                    const headerRow = thead.insertRow();
+                    const columns = Object.keys(preview[0]);
+                    columns.forEach(col => {
+                        const th = document.createElement('th');
+                        th.textContent = col;
+                        th.title = col;
+                        headerRow.appendChild(th);
+                    });
+                    
+                    // Create data rows
+                    preview.forEach((row, rowIndex) => {
+                        const tr = tbody.insertRow();
+                        columns.forEach((col, colIndex) => {
+                            const td = tr.insertCell();
+                            const value = row[col];
+                            td.textContent = value !== null && value !== undefined ? value : '';
+                            td.title = `Row ${rowIndex}, Col: ${col}, Value: ${value}`;
+                            td.dataset.row = rowIndex;
+                            td.dataset.col = col;
+                        });
+                    });
+                } catch (error) {
+                    console.error('Error fetching data preview:', error);
+                }
+            }
+            
+            handleCellClick(cell) {
+                if (this.isProcessing || !this.currentData) return;
+                
+                const row = cell.dataset.row;
+                const col = cell.dataset.col;
+                const currentValue = cell.textContent;
+                
+                const newValue = prompt(`Edit cell [${row}, ${col}]:`, currentValue);
+                if (newValue !== null && newValue !== currentValue) {
+                    this.editCell(row, col, newValue);
+                }
+            }
+            
+            async editCell(row, col, value) {
+                this.sendMessage({
+                    command: `edit cell at row ${row} column ${col} to ${value}`,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            
+            async loadSuggestions() {
+                if (!this.currentData) return;
+                
+                try {
+                    const response = await fetch('/suggestions');
+                    const suggestions = await response.json();
+                    this.displaySuggestions(suggestions);
+                } catch (error) {
+                    console.error('Error loading suggestions:', error);
+                }
+            }
+            
+            displaySuggestions(suggestions) {
+                const suggestionsContainer = document.getElementById('suggestions');
+                suggestionsContainer.innerHTML = '';
+                
+                suggestions.slice(0, 6).forEach(suggestion => {
+                    const chip = document.createElement('div');
+                    chip.className = 'suggestion-chip';
+                    chip.textContent = suggestion;
+                    chip.title = `Click to use: ${suggestion}`;
+                    suggestionsContainer.appendChild(chip);
+                });
+            }
+            
+            sendCommand() {
+                const input = document.getElementById('commandInput');
+                const command = input.value.trim();
+                
+                if (!command) return;
+                if (!this.currentData) {
+                    this.addMessage('Please upload a file first.', 'ai', 'error');
+                    return;
+                }
+                
+                this.addMessage(command, 'user');
+                input.value = '';
+                
+                this.sendMessage({
+                    command,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            
+            sendMessage(message) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.isProcessing = true;
+                    this.ws.send(JSON.stringify(message));
+                } else {
+                    this.addMessage('Connection lost. Please refresh the page.', 'ai', 'error');
+                }
+            }
+            
+            handleWebSocketMessage(data) {
+                if (data.status === 'processing') {
+                    this.addMessage(data.message, 'ai', 'processing');
+                } else if (data.status === 'executing') {
+                    this.addMessage(data.message, 'ai', 'processing');
+                } else if (data.status === 'complete') {
+                    this.handleAnalysisResult(data);
+                    this.isProcessing = false;
+                } else if (data.status === 'error') {
+                    this.addMessage(`Error: ${data.message}`, 'ai', 'error');
+                    this.isProcessing = false;
+                }
+                
+                // Update data preview if operation modified data
+                if (data.result && data.result.success && data.result.data_preview) {
+                    this.updateDataPreview(data.result.data_preview);
+                }
+            }
+            
+            handleAnalysisResult(data) {
+                const result = data.result;
+                const instruction = data.instruction;
+                
+                if (!result.success) {
+                    this.addMessage(`Operation failed: ${result.error || 'Unknown error'}`, 'ai', 'error');
+                    return;
+                }
+                
+                // Add to history
+                this.addToHistory(instruction, result);
+                
+                // Build response message
+                let message = `✅ Operation completed successfully!`;
+                
+                if (instruction.confidence) {
+                    message += `<span class="confidence-badge confidence-${instruction.confidence}">${instruction.confidence} confidence</span>`;
+                }
+                
+                if (result.message) {
+                    message += `\n\n${result.message}`;
+                }
+                
+                if (result.data_shape) {
+                    message += `\n📊 New shape: ${result.data_shape[0]} × ${result.data_shape[1]}`;
+                }
+                
+                this.addMessage(message, 'ai', 'success');
+                
+                // Update UI components
+                this.displayDataInfo();
+                this.loadSuggestions();
+                
+                // Handle visualization
+                if (result.chart_data) {
+                    this.createChart(result.chart_data, instruction.chart_type || 'bar');
+                }
+            }
+            
+            updateDataPreview(preview) {
+                if (!preview || preview.length === 0) return;
+                
+                const tbody = document.querySelector('#dataTable tbody');
+                tbody.innerHTML = '';
+                
+                const columns = Object.keys(preview[0]);
+                preview.forEach((row, rowIndex) => {
+                    const tr = tbody.insertRow();
+                    columns.forEach(col => {
+                        const td = tr.insertCell();
+                        const value = row[col];
+                        td.textContent = value !== null && value !== undefined ? value : '';
+                        td.title = `Row ${rowIndex}, Col: ${col}, Value: ${value}`;
+                        td.dataset.row = rowIndex;
+                        td.dataset.col = col;
+                    });
+                });
+            }
+            
+            addToHistory(instruction, result) {
+                const historyItem = {
+                    timestamp: new Date(),
+                    action: instruction.action,
+                    parameters: instruction.parameters,
+                    success: result.success,
+                    message: result.message
+                };
+                
+                this.operationHistory.unshift(historyItem);
+                this.updateHistoryDisplay();
+            }
+            
+            updateHistoryDisplay() {
+                const container = document.getElementById('historyContainer');
+                container.innerHTML = '';
+                
+                this.operationHistory.slice(0, 10).forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'history-item';
+                    div.innerHTML = `
+                        <div class="history-command">${item.action}</div>
+                        <div class="history-time">${item.timestamp.toLocaleTimeString()}</div>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+            
+            createChart(data, chartType) {
+                const canvas = document.getElementById('chartCanvas');
+                const ctx = canvas.getContext('2d');
+                
+                if (this.chart) {
+                    this.chart.destroy();
+                }
+                
+                const config = {
+                    type: chartType,
+                    data: {
+                        labels: data.labels || Object.keys(data),
+                        datasets: [{
+                            label: 'Data',
+                            data: data.values || Object.values(data),
+                            backgroundColor: this.getChartColors(data.values?.length || Object.keys(data).length),
+                            borderColor: 'rgba(255, 255, 255, 0.8)',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: { color: 'white' }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: { color: 'white' },
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                            },
+                            y: {
+                                ticks: { color: 'white' },
+                                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                            }
+                        }
+                    }
+                };
+                
+                this.chart = new Chart(ctx, config);
+            }
+            
+            getChartColors(count) {
+                const colors = [
+                    'rgba(255, 99, 132, 0.8)',
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(255, 205, 86, 0.8)',
+                    'rgba(75, 192, 192, 0.8)',
+                    'rgba(153, 102, 255, 0.8)',
+                    'rgba(255, 159, 64, 0.8)',
+                    'rgba(199, 199, 199, 0.8)',
+                    'rgba(83, 102, 255, 0.8)'
+                ];
+                
+                return Array.from({length: count}, (_, i) => colors[i % colors.length]);
+            }
+            
+            async undoOperation() {
+                try {
+                    const response = await fetch('/undo', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.addMessage('✅ Last operation undone successfully', 'ai', 'success');
+                        this.displayDataInfo();
+                        this.displayDataPreview();
+                    } else {
+                        this.addMessage(`❌ Undo failed: ${result.error}`, 'ai', 'error');
+                    }
+                } catch (error) {
+                    this.addMessage('❌ Undo operation failed', 'ai', 'error');
+                }
+            }
+            
+            async saveData() {
+                try {
+                    const response = await fetch('/save', { method: 'POST' });
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        this.addMessage('✅ Data saved successfully', 'ai', 'success');
+                        // Create download link
+                        if (result.download_url) {
+                            const link = document.createElement('a');
+                            link.href = result.download_url;
+                            link.download = result.filename || 'processed_data.xlsx';
+                            link.click();
+                        }
+                    } else {
+                        this.addMessage(`❌ Save failed: ${result.error}`, 'ai', 'error');
+                    }
+                } catch (error) {
+                    this.addMessage('❌ Save operation failed', 'ai', 'error');
+                }
+            }
+            
+            async checkHealth() {
+                try {
+                    const response = await fetch('/health');
+                    const health = await response.json();
+                    
+                    let message = '🔍 System Health Check:\n\n';
+                    message += `Status: ${health.status}\n`;
+                    message += `Memory Usage: ${health.memory_usage}\n`;
+                    message += `Active Connections: ${health.connections}\n`;
+                    message += `Uptime: ${health.uptime}`;
+                    
+                    this.addMessage(message, 'ai', health.status === 'healthy' ? 'success' : 'error');
+                } catch (error) {
+                    this.addMessage('❌ Health check failed', 'ai', 'error');
+                }
+            }
+            
+            clearData() {
+                if (confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
+                    // Clear UI elements
+                    document.getElementById('dataInfo').innerHTML = '<p>No file loaded</p>';
+                    document.getElementById('dataTable').querySelector('thead').innerHTML = '';
+                    document.getElementById('dataTable').querySelector('tbody').innerHTML = '';
+                    document.getElementById('chatMessages').innerHTML = '';
+                    document.getElementById('historyContainer').innerHTML = '';
+                    document.getElementById('suggestions').innerHTML = '';
+                    
+                    // Clear chart
+                    if (this.chart) {
+                        this.chart.destroy();
+                        this.chart = null;
+                    }
+                    
+                    // Reset state
+                    this.currentData = null;
+                    this.operationHistory = [];
+                    this.suggestions = [];
+                    
+                    // Reset file input
+                    document.getElementById('fileInput').value = '';
+                    
+                    // Disable buttons
+                    this.disableButtons();
+                    
+                    this.addMessage('🗑️ All data cleared successfully', 'ai', 'success');
+                }
+            }
+            
+            enableButtons() {
+                document.getElementById('undoBtn').disabled = false;
+                document.getElementById('saveBtn').disabled = false;
+            }
+            
+            disableButtons() {
+                document.getElementById('undoBtn').disabled = true;
+                document.getElementById('saveBtn').disabled = true;
+            }
+            
+            addMessage(message, sender, type = '') {
+                const chatMessages = document.getElementById('chatMessages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}-message`;
+                
+                if (type) {
+                    messageDiv.classList.add(type);
+                }
+                
+                // Format message for better display
+                if (message.includes('\n')) {
+                    messageDiv.innerHTML = message.replace(/\n/g, '<br>');
+                } else {
+                    messageDiv.innerHTML = message; // Use innerHTML to support HTML content like badges
+                }
+                
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                
+                return messageDiv;
+            }
+            
+            showLoading(show) {
+                const overlay = document.getElementById('loadingOverlay');
+                if (show) {
+                    overlay.classList.remove('hidden');
+                } else {
+                    overlay.classList.add('hidden');
+                }
+            }
+        }
+
+        // Initialize the application when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                window.excelTool = new EnhancedExcelMCPTool();
+                console.log('Excel MCP Tool initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize Excel MCP Tool:', error);
+                document.body.innerHTML = `
+                    <div style="display: flex; justify-content: center; align-items: center; height: 100vh; color: white; text-align: center;">
+                        <div>
+                            <h2>⚠️ Application Error</h2>
+                            <p>Failed to initialize the Excel MCP Tool. Please refresh the page.</p>
+                            <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #4facfe; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                                Refresh Page
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+
+        // Handle page visibility changes to manage WebSocket connections
+        document.addEventListener('visibilitychange', () => {
+            if (window.excelTool) {
+                if (document.hidden) {
+                    console.log('Page hidden - maintaining WebSocket connection');
+                } else {
+                    console.log('Page visible - checking WebSocket connection');
+                    if (window.excelTool.ws && window.excelTool.ws.readyState !== WebSocket.OPEN) {
+                        window.excelTool.connectWebSocket();
+                    }
+                }
+            }
+        });
+
+        // Handle window beforeunload to clean up resources
+        window.addEventListener('beforeunload', () => {
+            if (window.excelTool && window.excelTool.ws) {
+                window.excelTool.ws.close();
+            }
+        });
+
+        // Global error handler for unhandled promise rejections
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled promise rejection:', event.reason);
+            if (window.excelTool) {
+                window.excelTool.addMessage('⚠️ An unexpected error occurred. Please try again.', 'ai', 'error');
+            }
+            event.preventDefault();
+        });
+            </script>
+        </body>
 </html>
